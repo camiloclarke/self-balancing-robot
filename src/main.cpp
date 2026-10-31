@@ -1,61 +1,39 @@
 #include <Arduino.h>
-#include <Wire.h>
 
-const uint8_t MPU = 0x68;
-float gyroBias = 0;
-float angle = 0;
-unsigned long lastMicros;
+const int PWMA = 32, AIN1 = 25, AIN2 = 33;
+const int PWMB = 14, BIN1 = 26, BIN2 = 27;
+const int STBY = 4;
+const int FREQ = 20000, RES = 8;
 
-void writeReg(uint8_t reg, uint8_t val) {
-  Wire.beginTransmission(MPU);
-  Wire.write(reg);
-  Wire.write(val);
-  Wire.endTransmission();
+void setMotor(int pwmPin, int in1, int in2, int speed) {
+  digitalWrite(in1, speed > 0);
+  digitalWrite(in2, speed < 0);
+  ledcWrite(pwmPin, abs(speed));
 }
 
-void readIMU(int16_t &ay, int16_t &az, int16_t &gx) {
-  Wire.beginTransmission(MPU);
-  Wire.write(0x3B);                 // start of accel data
-  Wire.endTransmission(false);
-  Wire.requestFrom(MPU, (uint8_t)14);
-  int16_t d[7];
-  for (int i = 0; i < 7; i++) d[i] = (Wire.read() << 8) | Wire.read();
-  ay = d[1]; az = d[2]; gx = d[4];  // ax, ay, az, temp, gx, gy, gz
+void ramp(const char* name, int pwmPin, int in1, int in2, int dir) {
+  for (int pwm = 0; pwm <= 255; pwm += 5) {
+    setMotor(pwmPin, in1, in2, dir * pwm);
+    Serial.printf("%s %s pwm=%d\n", name, dir > 0 ? "fwd" : "rev", pwm);
+    delay(300);
+  }
+  setMotor(pwmPin, in1, in2, 0);
+  delay(1000);
 }
 
 void setup() {
   Serial.begin(115200);
-  Wire.begin(21, 22);               // SDA, SCL
-
-  Wire.beginTransmission(MPU);
-  if (Wire.endTransmission() != 0) {
-    Serial.println("MPU6050 not found - check wiring");
-    while (true) delay(1000);
-  }
-  writeReg(0x6B, 0);                // wake it up
-
-  Serial.println("Calibrating, keep still...");
-  int16_t ay, az, gx;
-  for (int i = 0; i < 500; i++) {
-    readIMU(ay, az, gx);
-    gyroBias += gx;
-    delay(2);
-  }
-  gyroBias /= 500;
-  lastMicros = micros();
+  int pins[] = {AIN1, AIN2, BIN1, BIN2, STBY};
+  for (int p : pins) pinMode(p, OUTPUT);
+  digitalWrite(STBY, HIGH);          // enable driver
+  ledcAttach(PWMA, FREQ, RES);
+  ledcAttach(PWMB, FREQ, RES);
+  delay(2000);
 }
 
 void loop() {
-  int16_t ay, az, gx;
-  readIMU(ay, az, gx);
-
-  float dt = (micros() - lastMicros) / 1e6;
-  lastMicros = micros();
-
-  float accAngle = atan2(ay, az) * 180 / PI;                 // tilt from gravity: noisy, no drift
-  float gyroRate = (gx - gyroBias) / 131.0;                  // deg/s: smooth, but drifts
-  angle = 0.98 * (angle + gyroRate * dt) + 0.02 * accAngle;  // complementary filter
-
-  Serial.printf(">acc:%.2f\n>filtered:%.2f\n", accAngle, angle);
-  delay(10);
+  ramp("A", PWMA, AIN1, AIN2, 1);
+  ramp("A", PWMA, AIN1, AIN2, -1);
+  ramp("B", PWMB, BIN1, BIN2, 1);
+  ramp("B", PWMB, BIN1, BIN2, -1);
 }
