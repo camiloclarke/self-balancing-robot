@@ -49,6 +49,15 @@ A two-wheeled self-balancing robot built around an ESP32. The aim is to take the
 | C1 (A) | Green |
 | C2 (B) | Yellow |
 
+**Encoders → ESP32** (same colours on both motors)
+
+| Encoder wire | Motor A | Motor B |
+|---|---|---|
+| Black (VCC) | 3V3 | 3V3 |
+| Blue (GND) | GND | GND |
+| Green (C1 / A) | GPIO 18 | GPIO 16 |
+| Yellow (C2 / B) | GPIO 19 | GPIO 17 |
+
 ## Progress log
 
 ### 1. Toolchain (Blink + serial)
@@ -68,8 +77,14 @@ PlatformIO set up in VS Code, onboard LED blinking and serial output at 115200 b
 - To re-measure on the 7.4 V battery (expected to be lower) and again with wheels and the robot's weight on.
 - Note: the ESP32 Arduino core 3.x replaced `ledcSetup` / `ledcAttachPin` with `ledcAttach(pin, freq, res)`, and `ledcWrite` now takes the pin rather than a channel.
 
+### 4. Encoders
+- Quadrature encoders read via interrupts on channel A (both edges), with channel B giving direction.
+- Measured **~720 counts per output shaft revolution** (≈24 counts per motor revolution × ~30:1 gearbox), consistent across both motors.
+- Encoder VCC on 3.3 V so the signal outputs are safe for the ESP32 inputs.
+
 ## Next steps
-- [ ] Read wheel encoders with interrupts and check both count positive when driving forwards
+- [x] Read wheel encoders with interrupts
+- [ ] Check both encoders count positive when the robot drives forwards (fix signs in code)
 - [ ] Battery + buck converter power wiring (set buck output to 5 V with a multimeter first)
 - [ ] Replace the complementary filter with my own Kalman filter
 - [ ] Build the chassis (battery high, IMU rigid and close to the axle)
