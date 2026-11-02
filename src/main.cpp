@@ -1,39 +1,27 @@
 #include <Arduino.h>
 
-const int PWMA = 32, AIN1 = 25, AIN2 = 33;
-const int PWMB = 14, BIN1 = 26, BIN2 = 27;
-const int STBY = 4;
-const int FREQ = 20000, RES = 8;
+const int ENC_A1 = 18, ENC_A2 = 19;   // motor A: green, yellow
+const int ENC_B1 = 16, ENC_B2 = 17;   // motor B: green, yellow
 
-void setMotor(int pwmPin, int in1, int in2, int speed) {
-  digitalWrite(in1, speed > 0);
-  digitalWrite(in2, speed < 0);
-  ledcWrite(pwmPin, abs(speed));
+volatile long countA = 0, countB = 0;
+
+// runs every time channel 1 changes; channel 2 tells us direction
+void IRAM_ATTR isrA() {
+  if (digitalRead(ENC_A1) == digitalRead(ENC_A2)) countA++; else countA--;
 }
-
-void ramp(const char* name, int pwmPin, int in1, int in2, int dir) {
-  for (int pwm = 0; pwm <= 255; pwm += 5) {
-    setMotor(pwmPin, in1, in2, dir * pwm);
-    Serial.printf("%s %s pwm=%d\n", name, dir > 0 ? "fwd" : "rev", pwm);
-    delay(300);
-  }
-  setMotor(pwmPin, in1, in2, 0);
-  delay(1000);
+void IRAM_ATTR isrB() {
+  if (digitalRead(ENC_B1) == digitalRead(ENC_B2)) countB++; else countB--;
 }
 
 void setup() {
   Serial.begin(115200);
-  int pins[] = {AIN1, AIN2, BIN1, BIN2, STBY};
-  for (int p : pins) pinMode(p, OUTPUT);
-  digitalWrite(STBY, HIGH);          // enable driver
-  ledcAttach(PWMA, FREQ, RES);
-  ledcAttach(PWMB, FREQ, RES);
-  delay(2000);
+  int pins[] = {ENC_A1, ENC_A2, ENC_B1, ENC_B2};
+  for (int p : pins) pinMode(p, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ENC_A1), isrA, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENC_B1), isrB, CHANGE);
 }
 
 void loop() {
-  ramp("A", PWMA, AIN1, AIN2, 1);
-  ramp("A", PWMA, AIN1, AIN2, -1);
-  ramp("B", PWMB, BIN1, BIN2, 1);
-  ramp("B", PWMB, BIN1, BIN2, -1);
+  Serial.printf("A: %ld   B: %ld\n", countA, countB);
+  delay(100);
 }
